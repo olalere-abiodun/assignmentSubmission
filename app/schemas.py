@@ -11,7 +11,8 @@ class UserBase(BaseModel):
     username: str
 
 class User(UserBase):
-    id: int
+    User_id: int
+    email: EmailStr
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,14 +22,46 @@ class UserCreate(UserBase):
     password: str
     role: UserRole
 
+class UserUpdate(UserBase):
+    email: EmailStr
+    full_name: str
+
 class UserLogin(BaseModel):
     username: str
     password: str
 
 class UserResponse(BaseModel):
     full_name: str
+    username: str
     email: EmailStr
     role: UserRole
+
+# Course Schema
+class CourseBase(BaseModel):
+    course_name: str
+    course_code: str
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class RegisterCourse(CourseBase):
+    pass
+
+class CourseUpdate(BaseModel):
+    course_name: Optional[str] = None
+    course_code: Optional[str] = None
+    description: Optional[str] = None
+
+class CourseResponse(BaseModel):
+    course_name: str
+    course_code: str
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+    
+
+
+
 
 
 

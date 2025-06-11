@@ -1,4 +1,5 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
+from pydantic import EmailStr
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from database import Base, SessionLocal, engine
@@ -41,3 +42,37 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         )
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
+
+#Edit User
+@app.put("/users/me", response_model=schemas.UserResponse)
+async def update_user_profile(updateUser: schemas.UserUpdate,db: Session = Depends(get_db),current_user: schemas.User = Depends(get_current_user)):
+    user = crud.check_username(db, username=current_user.username)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not Authorized")
+
+    updated_user = crud.UpdateUser(db=db, email=current_user.email, updateUser=updateUser)
+    return updated_user
+
+# Course Management endpoints
+@app.post("/courses/", response_model=schemas.CourseResponse)
+async def create_course(course: schemas.RegisterCourse, db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
+    if current_user.role != "lecturer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only lecturers can create courses")
+    # Get the lecturer ID from the current user
+    lecturer_id = current_user.user_id
+    new_course = crud.create_new_course(db=db, course=course, lecturer_id=lecturer_id)
+    return new_course
+
+# Get all courses
+@app.get("/courses/", response_model=list[schemas.CourseResponse])
+async def get_all_courses(db: Session = Depends(get_db)):
+    courses = crud.get_all_courses(db=db)
+    return courses
+
+# Get course by ID
+@app.get("/courses/{course_id}", response_model=schemas.CourseResponse)
+async def get_course_by_id(course_id: int, db: Session = Depends(get_db)):
+    course = crud.get_course_by_id(db=db, course_id=course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return course
