@@ -58,6 +58,15 @@ class CourseResponse(BaseModel):
     description: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class EnrollResponse(BaseModel):
+    username: str
+    course_name: str
+    course_code: str
+    lecturer_id: int
+    
+
+
     
 
 

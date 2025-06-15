@@ -3,7 +3,7 @@ from pydantic import EmailStr
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from database import Base, SessionLocal, engine
-import schemas, crud
+import schemas, crud, model
 from dependencies import get_db
 from auth import pwd_context, oauth2_scheme, authenticate_user, create_access_token, get_current_user 
 
@@ -76,3 +76,29 @@ async def get_course_by_id(course_id: int, db: Session = Depends(get_db)):
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     return course
+
+# Enroll in a course
+@app.post("/courses/{course_id}/enroll", response_model=schemas.EnrollResponse)
+async def enroll_in_course(course_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
+    user_id = current_user.user_id
+    # Get Course name by course_id
+    course = crud.get_course_by_id(db=db, course_id=course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    # Check if the user is already enrolled in the course
+    existing_enrollment = db.query(model.Enrollment).filter(
+        model.Enrollment.user_id == user_id,
+        model.Enrollment.course_id == course_id
+    ).first()
+    if existing_enrollment:
+        raise HTTPException(status_code=400, detail="Already enrolled in this course")
+    # Create a new enrollment
+    enrollment = crud.new_enroll(db=db, user_id=user_id, course_id=course_id)
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Course not found or already enrolled")
+    return schemas.EnrollResponse(
+        username=current_user.username,          
+        course_name=course.course_name,
+        course_code=course.course_code,
+        lecturer_id=course.lecturer_id
+    )

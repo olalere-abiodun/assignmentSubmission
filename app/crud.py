@@ -63,4 +63,17 @@ def get_all_courses(db: Session):
 def get_course_by_id(db: Session, course_id: int):
     return db.query(model.Course).filter(model.Course.course_id == course_id).first()
 
+#Enroll in a course
+def new_enroll(db: Session, user_id: int, course_id: int):
+   db_enroll = model.Enrollment (
+      user_id = user_id,
+      course_id = course_id
+
+   )
+   db.add(db_enroll)
+   db.commit()
+   db.refresh(db_enroll)
+   return db_enroll
+
+
 

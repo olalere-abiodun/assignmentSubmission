@@ -14,7 +14,8 @@ class Users(Base):
     email = Column(String(255), unique=True, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
-    courses = relationship("Course", back_populates="user")
+    courses = relationship("Course", back_populates="lecturer")
+    enrollments = relationship("Enrollment", back_populates="user")
 
 class Course(Base):
     __tablename__ = 'courses'
@@ -26,5 +27,18 @@ class Course(Base):
     lecturer_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
-    user = relationship("Users", back_populates="courses")
+    lecturer = relationship("Users", back_populates="courses")
+    enrollments = relationship("Enrollment", back_populates="course")
+
+# Student Enrollment Model
+class Enrollment(Base):
+    __tablename__ = 'enrollments'
+
+    enrollment_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
+    course_id = Column(Integer, ForeignKey('courses.course_id'), nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    user = relationship("Users", back_populates="enrollments")
+    course = relationship("Course", back_populates="enrollments")
 
