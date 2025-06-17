@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, EmailStr
 from enum import Enum
 from typing import Optional
+from datetime import datetime, date, timedelta
 
 class UserRole(str, Enum):
     STUDENT = "student"
@@ -64,7 +65,21 @@ class EnrollResponse(BaseModel):
     course_name: str
     course_code: str
     lecturer_id: int
-    
+
+class AssignmentCreate(BaseModel):
+    course_id: int
+    assignment_title: str
+    description: Optional[str] = None
+    due_date: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AssignmentResponse(BaseModel):
+    assignment_id: int
+    assignment_title: str
+    description: Optional[str] = None
+    due_date: datetime
+
 
 
     

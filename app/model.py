@@ -16,6 +16,7 @@ class Users(Base):
 
     courses = relationship("Course", back_populates="lecturer")
     enrollments = relationship("Enrollment", back_populates="user")
+    assignments = relationship("Assignment", back_populates="lecturer")
 
 class Course(Base):
     __tablename__ = 'courses'
@@ -29,6 +30,7 @@ class Course(Base):
 
     lecturer = relationship("Users", back_populates="courses")
     enrollments = relationship("Enrollment", back_populates="course")
+    assignments = relationship("Assignment", back_populates="course")
 
 # Student Enrollment Model
 class Enrollment(Base):
@@ -41,4 +43,19 @@ class Enrollment(Base):
 
     user = relationship("Users", back_populates="enrollments")
     course = relationship("Course", back_populates="enrollments")
+
+# Assignment Model
+class Assignment(Base):
+    __tablename__ = 'assignments'
+
+    assignment_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    course_id = Column(Integer, ForeignKey('courses.course_id'), nullable=False)
+    lecturer_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
+    assignment_title = Column(String(255), nullable=False)
+    description = Column(String(500), nullable=True)
+    due_date = Column(TIMESTAMP, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    course = relationship("Course", back_populates="assignments")
+    lecturer = relationship("Users", back_populates="assignments")
 
