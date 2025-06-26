@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, HttpUrl
 from enum import Enum
 from typing import Optional
 from datetime import datetime, date, timedelta
@@ -80,6 +80,38 @@ class AssignmentResponse(BaseModel):
     description: Optional[str] = None
     due_date: datetime
 
+class AssignmentUpdate(BaseModel):
+    assignment_title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SubmissionCreate(BaseModel):
+    assignment_id: int                       
+    student_id: int                          
+    content: str                             
+    file_url: Optional[str] = None        
+    submission_date: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class SubmissionResponse(BaseModel):
+    submission_id: int
+    assignment_id: int
+    user_id: int
+    submission_date: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AllSubmissionsResponse(BaseModel):
+    submission_id: int
+    assignment_id: int
+    user_id: int
+    content: str
+    file_url: Optional[str]
+    submission_date: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
     

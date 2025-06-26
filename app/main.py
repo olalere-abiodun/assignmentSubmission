@@ -1,16 +1,28 @@
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, Form
 from pydantic import EmailStr
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from typing import Optional
+from datetime import datetime, date, timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from database import Base, SessionLocal, engine
 import schemas, crud, model
 from dependencies import get_db
 from auth import pwd_context, oauth2_scheme, authenticate_user, create_access_token, get_current_user 
-
+import os
 
 Base.metadata.create_all(bind=engine)
 
+UPLOAD_DIR = "uploads"
+
 app = FastAPI()
+
+# Create uploads directory if it doesn't exist
+os.makedirs("uploads", exist_ok=True)
+
+# Mount static files directory for serving uploaded files
+app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 @app.get("/")
 async def home():
@@ -208,3 +220,154 @@ async def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     return 
+# Edit assignment
+@app.put("/assignments/{assignment_id}", response_model=schemas.AssignmentResponse)
+async def update_assignment(assignment_id: int, assignment_update: schemas.AssignmentUpdate, db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
+    if current_user.role != "lecturer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only lecturers can update assignments")
+    
+    # Check if the assignment exists
+    assignment = crud.get_assignment_by_id(db=db, assignment_id=assignment_id)
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    # Update the assignment
+    updated_assignment = crud.update_assignment(db=db, assignment_id=assignment_id, assignment_update=assignment_update)
+    return updated_assignment
+
+# Delete assignment 
+@app.delete("/assignments/{assignment_id}", response_model=dict)
+async def delete_assignment(assignment_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
+    if current_user.role != "lecturer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only lecturers can delete assignments")
+    
+    # Check if the assignment exists
+    assignment = crud.get_assignment_by_id(db=db, assignment_id=assignment_id)
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    # Delete the assignment
+    crud.delete_assignment(db=db, assignment_id=assignment_id)
+    return {"message": "Assignment deleted successfully"}
+
+# Submission Management endpoints 
+# Create a new submission
+@app.post("/submissions/", response_model=schemas.SubmissionResponse)
+async def submit_assignment(
+    assignment_id: int = Form(...),
+    content: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(get_current_user)
+):
+    if current_user.role != "student":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can submit assignments")
+    
+# Get the assignment
+    assignment = crud.get_assignment_by_id(db, assignment_id)
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+# Check due date
+    if datetime.utcnow() > assignment.due_date:
+        raise HTTPException(status_code=403, detail="The submission deadline has passed.")
+
+
+# Get the course_id associated with the assignment
+    course_id = crud.get_course_id_by_assignment(db=db, assignment_id=assignment_id)
+    if course_id is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+# Now check if student is enrolled in the course
+    if not crud.is_student_enrolled(db=db, student_id=current_user.user_id, course_id=course_id):
+        raise HTTPException(status_code=403, detail="You are not enrolled in the course for this assignment")
+
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    # Save the uploaded file (optional — could be to disk or cloud like S3)
+    file_url = None
+    if file:
+        filename = f"uploads/{file.filename}"
+        with open(filename, "wb") as f:
+            f.write(await file.read())
+        file_url = f"/static/{file.filename}"  # or a full URL if hosted elsewhere
+
+    # Create submission object
+    submission_data = schemas.SubmissionCreate(
+        assignment_id=assignment_id,
+        student_id=current_user.user_id,
+        content=content,
+        file_url=file_url,
+        submission_date=datetime.utcnow()
+    )
+
+    new_submission = crud.create_submission(db=db, submission=submission_data, student_id=current_user.user_id)
+    return new_submission
+
+# Output all submitted assignments for an assignment
+@app.get("/submissions/{assignment_id}/all", response_model=list[schemas.AllSubmissionsResponse])
+async def get_all_submissions(assignment_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
+    if current_user.role != "lecturer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only lecturers can view all submissions for an assignment")
+    # Check if the assignment exists
+    assignment = crud.get_assignment_by_id(db=db, assignment_id=assignment_id)
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    submissions = crud.get_all_assignment_submissions(db=db, assignment_id=assignment_id)
+    if not submissions:
+        raise HTTPException(status_code=404, detail="No submissions found for this assignment")
+    
+    response = []
+    for submission in submissions:
+        response.append(schemas.AllSubmissionsResponse(
+            submission_id=submission.submission_id,
+            assignment_id=submission.assignment_id,
+            user_id=submission.user_id,
+            content=submission.content,
+            file_url=submission.file_url,
+            submission_date=submission.submission_date
+        ))
+    return response
+
+# Get all submissions by student
+@app.get("/submissions/my", response_model=list[schemas.SubmissionResponse])
+async def get_my_submissions(db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
+    if current_user.role != "student":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can view their submissions")
+    
+    submissions = crud.get_submission_by_student(db=db, student_id=current_user.user_id)
+    if not submissions:
+        raise HTTPException(status_code=404, detail="No submissions found for this student")
+    
+    response = []
+    for submission in submissions:
+        response.append(schemas.SubmissionResponse(
+            submission_id=submission.submission_id,
+            assignment_id=submission.assignment_id,
+            user_id=submission.user_id,
+            submission_date=submission.submission_date
+        ))
+    return response
+# View my submission for a specific assignment 
+@app.get("/submissions/{assignment_id}/me", response_model=schemas.SubmissionResponse)
+async def get_my_submission_for_assignment(assignment_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view their submission")
+    submission = crud.get_submission_by_student_and_assignment(db, assignment_id=assignment_id, student_id=current_user.user_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="No submission found for this assignment")
+    return submission
+
+@app.get("/download/{filename}")
+async def download_file(filename: str):
+    filepath = os.path.join("uploads", filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path=filepath, filename=filename, media_type='application/octet-stream')
+
+
+
+
+
+

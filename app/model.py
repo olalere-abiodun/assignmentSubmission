@@ -17,6 +17,7 @@ class Users(Base):
     courses = relationship("Course", back_populates="lecturer")
     enrollments = relationship("Enrollment", back_populates="user")
     assignments = relationship("Assignment", back_populates="lecturer")
+    submissions = relationship("Submission", back_populates="user")
 
 class Course(Base):
     __tablename__ = 'courses'
@@ -31,6 +32,7 @@ class Course(Base):
     lecturer = relationship("Users", back_populates="courses")
     enrollments = relationship("Enrollment", back_populates="course")
     assignments = relationship("Assignment", back_populates="course")
+
 
 # Student Enrollment Model
 class Enrollment(Base):
@@ -58,4 +60,19 @@ class Assignment(Base):
 
     course = relationship("Course", back_populates="assignments")
     lecturer = relationship("Users", back_populates="assignments")
+    submissions = relationship("Submission", back_populates="assignment")
+
+# Submission table 
+class Submission(Base):
+    __tablename__ = 'submissions'
+
+    submission_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    assignment_id = Column(Integer, ForeignKey('assignments.assignment_id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
+    submission_date = Column(TIMESTAMP, server_default=func.now())
+    content = Column(String(500), nullable=False)
+    file_url = Column(String(500), nullable=True)
+
+    assignment = relationship("Assignment" , back_populates="submissions")
+    user = relationship("Users", back_populates="submissions")
 

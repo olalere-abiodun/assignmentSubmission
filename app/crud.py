@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 import schemas, model
+from typing import Optional
 
 #User CRUD
 # ==========================================================
@@ -143,4 +144,81 @@ def create_assignment(db: Session, assignment: schemas.AssignmentCreate, lecture
 def get_assignment_by_id(db: Session, assignment_id: int):
     return db.query(model.Assignment).filter(model.Assignment.assignment_id == assignment_id).first()
 
+def update_assignment(db: Session, assignment_id: int, assignment_update: schemas.AssignmentUpdate):
+    db_assignment = db.query(model.Assignment).filter(model.Assignment.assignment_id == assignment_id).first()
+    if not db_assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    db_assignment.assignment_title = assignment_update.assignment_title if assignment_update.assignment_title else db_assignment.assignment_title
+    db_assignment.description = assignment_update.description if assignment_update.description else db_assignment.description
+    db_assignment.due_date = assignment_update.due_date if assignment_update.due_date else db_assignment.due_date
+    
+    db.commit()
+    db.refresh(db_assignment)
+    return db_assignment
 
+# delete assignment 
+def delete_assignment(db: Session, assignment_id: int):
+    db_assignment = db.query(model.Assignment).filter(model.Assignment.assignment_id == assignment_id).first()
+    if not db_assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found") 
+    db.delete(db_assignment)
+    db.commit()
+    return {"message": "Assignment deleted successfully"}
+
+# Get all assignments for a course
+def get_assignments_by_course_id(db: Session, course_id: int):
+    return db.query(model.Assignment).filter(model.Assignment.course_id == course_id).all()
+
+# Submission CRUD
+# =============================================================
+# Check if student is enrolled in the course before submitting an assignment
+def is_student_enrolled(db: Session, student_id: int, course_id: int):
+    return db.query(model.Enrollment).filter(
+        model.Enrollment.user_id == student_id,
+        model.Enrollment.course_id == course_id
+    ).first() is not None
+
+# Check if student already submitted the assignment 
+def has_student_submitted(db: Session, student_id: int, assignment_id: int):
+    return db.query(model.Submission).filter(
+        model.Submission.user_id == student_id,
+        model.Submission.assignment_id == assignment_id
+    ).first() is not None
+
+# helper function to get course_id from assignment_id 
+def get_course_id_by_assignment(db: Session, assignment_id: int) -> Optional[int]:
+    assignment = db.query(model.Assignment).filter(model.Assignment.assignment_id == assignment_id).first()
+    return assignment.course_id if assignment else None
+
+
+# Submit an Submission
+
+def create_submission(db: Session, submission: schemas.SubmissionCreate, student_id: int):
+    db_submission = model.Submission(
+        assignment_id=submission.assignment_id,
+        user_id=student_id,
+        content=submission.content,
+        file_url=submission.file_url,
+        submission_date=submission.submission_date
+    )
+    db.add(db_submission)
+    db.commit()
+    db.refresh(db_submission)
+    return db_submission
+
+# Get all submissions for an assignment
+def get_all_assignment_submissions(db: Session, assignment_id: int):
+    return db.query(model.Submission).filter(model.Submission.assignment_id == assignment_id).all() 
+
+# Get submissions by student 
+def get_submission_by_student(db: Session, student_id: int):
+    return db.query(model.Submission).filter(model.Submission.user_id == student_id).all()
+
+# Get submission by a student for a specific assignment 
+def get_submission_by_student_and_assignment(db: Session, student_id: int, assignment_id: int):
+    return db.query(model.Submission).filter(
+        model.Submission.user_id == student_id,
+        model.Submission.assignment_id == assignment_id
+    ).first()
+    
