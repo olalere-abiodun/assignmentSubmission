@@ -7,10 +7,10 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from database import SessionLocal
-from dependencies import get_db
+from app.database import SessionLocal
+from app.dependencies import get_db
 from datetime import datetime, timedelta, timezone
-import crud
+from app import crud
 
 
 load_dotenv()

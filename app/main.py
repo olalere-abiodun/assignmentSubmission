@@ -6,17 +6,21 @@ from typing import Optional
 from datetime import datetime, date, timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from database import Base, SessionLocal, engine
-import schemas, crud, model
-from dependencies import get_db
-from auth import pwd_context, oauth2_scheme, authenticate_user, create_access_token, get_current_user 
+from app.database import Base, SessionLocal, engine
+from app import schemas, crud, model
+from app.dependencies import get_db
+from app.auth import pwd_context, oauth2_scheme, authenticate_user, create_access_token, get_current_user 
 import os
+from my_logging.logger import get_logger
 
 Base.metadata.create_all(bind=engine)
 
 UPLOAD_DIR = "uploads"
 
 app = FastAPI()
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Create uploads directory if it doesn't exist
 os.makedirs("uploads", exist_ok=True)
@@ -26,6 +30,7 @@ app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 @app.get("/")
 async def home():
+    logger.info("Home endpoint accessed")
     return {"message": "Welcome To The Assignment Submission System"}
 
 # User management endpoints
@@ -40,6 +45,7 @@ async def signUp(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username Taken")
     hashed_password = pwd_context.hash(user.password)
     new_user = crud.Sign_up(db=db, user=user, hashed_password = hashed_password)
+    logger.info(f"New user created: {new_user.username}")
     return new_user
               
 # User Login
@@ -53,6 +59,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(data={"sub": user.username})
+    logger.info(f"User logged in: {user.username}")
+    # Return the access token and token type
     return {"access_token": access_token, "token_type": "bearer"}
 
 #Edit User
@@ -63,6 +71,7 @@ async def update_user_profile(updateUser: schemas.UserUpdate,db: Session = Depen
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not Authorized")
 
     updated_user = crud.UpdateUser(db=db, email=current_user.email, updateUser=updateUser)
+    logger.info(f"User profile updated: {updated_user.username}")
     return updated_user
 
 # Course Management endpoints
@@ -74,12 +83,14 @@ async def create_course(course: schemas.RegisterCourse, db: Session = Depends(ge
     # Get the lecturer ID from the current user
     lecturer_id = current_user.user_id
     new_course = crud.create_new_course(db=db, course=course, lecturer_id=lecturer_id)
+    logger.info(f"New course created: {new_course.course_name} by lecturer ID: {lecturer_id}")
     return new_course
 
 # Get all courses
 @app.get("/courses/", response_model=list[schemas.CourseResponse])
 async def get_all_courses(db: Session = Depends(get_db)):
     courses = crud.get_all_courses(db=db)
+    logger.info(f"Retrieved {len(courses)} courses")
     return courses
 
 # Get course by ID
@@ -88,6 +99,7 @@ async def get_course_by_id(course_id: int, db: Session = Depends(get_db)):
     course = crud.get_course_by_id(db=db, course_id=course_id)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    logger.info(f"Retrieved course: {course.course_name} with ID: {course_id}")
     return course
 
 # Get course by course code
@@ -96,6 +108,7 @@ async def get_course_by_code(course_code: str, db: Session = Depends(get_db)):
     course = crud.get_course_by_code(db=db, course_code=course_code)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    logger.info(f"Retrieved course: {course.course_name} with code: {course_code}")
     return course
 
 # Update course by ID
@@ -111,6 +124,7 @@ async def update_course(course_id: int, course_update: schemas.CourseUpdate, db:
         raise HTTPException(status_code=403, detail="You are not authorized to update this course")
     # Update the course
     updated_course = crud.update_course(db=db, course_id=course_id, course_update=course_update)
+    logger.info(f"Course updated: {updated_course.course_name} with ID: {course_id} by lecturer ID: {current_user.user_id}")
     return updated_course
 
 # Update course by course code
@@ -126,6 +140,7 @@ async def update_course_by_code(course_code: str, course_update: schemas.CourseU
         raise HTTPException(status_code=403, detail="You are not authorized to update this course")
     # Update the course
     updated_course = crud.update_course_by_code(db=db, course_code=course_code, course_update=course_update)
+    logger.info(f"Course updated: {updated_course.course_name} with code: {course_code} by lecturer ID: {current_user.user_id}")
     return updated_course
 
 
@@ -148,6 +163,7 @@ async def enroll_in_course(course_id: int, db: Session = Depends(get_db), curren
     enrollment = crud.new_enroll(db=db, user_id=user_id, course_id=course_id)
     if not enrollment:
         raise HTTPException(status_code=404, detail="Course not found or already enrolled")
+    logger.info(f"User {current_user.username} enrolled in course: {course.course_name} with ID: {course_id}")
     return schemas.EnrollResponse(
         username=current_user.username,          
         course_name=course.course_name,
@@ -172,6 +188,7 @@ async def get_user_enrollments(db: Session = Depends(get_db), current_user: sche
                 course_code=course.course_code,
                 lecturer_id=course.lecturer_id
             ))
+    logger.info(f"Retrieved {len(response)} enrollments for user: {current_user.username}")
     return response
 
 # Unenroll from a course
@@ -194,7 +211,7 @@ async def unenroll_from_course(course_id: int, db: Session = Depends(get_db), cu
     course = crud.get_course_by_id(db=db, course_id=course_id)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-    
+    logger.info(f"User {current_user.username} unenrolled from course: {course.course_name} with ID: {course_id}")
     return schemas.EnrollResponse(
         username=current_user.username,
         course_name=course.course_name,
@@ -211,6 +228,7 @@ async def create_assignment(assignment: schemas.AssignmentCreate, db: Session = 
 
     # Create the assignment
     new_assignment = crud.create_assignment(db=db, assignment=assignment, lecturer_id=current_user.user_id)
+    logger.info(f"New assignment created: {new_assignment.assignment_title} for course ID: {assignment.course_id} by lecturer ID: {current_user.user_id}")
     return new_assignment
 
 # Get assignemt by ID
@@ -219,7 +237,8 @@ async def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)
     assignment = crud.get_assignment_by_id(db=db, assignment_id=assignment_id)
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    return 
+    logger.info(f"Retrieved assignment: {assignment.assignment_title} with ID: {assignment_id}")
+    return assignment
 # Edit assignment
 @app.put("/assignments/{assignment_id}", response_model=schemas.AssignmentResponse)
 async def update_assignment(assignment_id: int, assignment_update: schemas.AssignmentUpdate, db: Session = Depends(get_db), current_user: schemas.User = Depends(get_current_user)):
@@ -233,6 +252,7 @@ async def update_assignment(assignment_id: int, assignment_update: schemas.Assig
     
     # Update the assignment
     updated_assignment = crud.update_assignment(db=db, assignment_id=assignment_id, assignment_update=assignment_update)
+    logger.info(f"Assignment updated: {updated_assignment.assignment_title} with ID: {assignment_id} by lecturer ID: {current_user.user_id}")
     return updated_assignment
 
 # Delete assignment 
@@ -248,6 +268,7 @@ async def delete_assignment(assignment_id: int, db: Session = Depends(get_db), c
     
     # Delete the assignment
     crud.delete_assignment(db=db, assignment_id=assignment_id)
+    logger.info(f"Assignment deleted: {assignment.assignment_title} with ID: {assignment_id} by lecturer ID: {current_user.user_id}")
     return {"message": "Assignment deleted successfully"}
 
 # Submission Management endpoints 
@@ -302,6 +323,7 @@ async def submit_assignment(
     )
 
     new_submission = crud.create_submission(db=db, submission=submission_data, student_id=current_user.user_id)
+    logger.info(f"New submission created for assignment ID: {assignment_id} by student ID: {current_user.user_id}")
     return new_submission
 
 # Output all submitted assignments for an assignment
@@ -328,6 +350,7 @@ async def get_all_submissions(assignment_id: int, db: Session = Depends(get_db),
             file_url=submission.file_url,
             submission_date=submission.submission_date
         ))
+    logger.info(f"Retrieved {len(response)} submissions for assignment ID: {assignment_id}")    
     return response
 
 # Get all submissions by student
@@ -348,6 +371,7 @@ async def get_my_submissions(db: Session = Depends(get_db), current_user: schema
             user_id=submission.user_id,
             submission_date=submission.submission_date
         ))
+    logger.info(f"Retrieved {len(response)} submissions for student ID: {current_user.user_id}")
     return response
 # View my submission for a specific assignment 
 @app.get("/submissions/{assignment_id}/me", response_model=schemas.SubmissionResponse)
@@ -357,6 +381,7 @@ async def get_my_submission_for_assignment(assignment_id: int, db: Session = Dep
     submission = crud.get_submission_by_student_and_assignment(db, assignment_id=assignment_id, student_id=current_user.user_id)
     if not submission:
         raise HTTPException(status_code=404, detail="No submission found for this assignment")
+    logger.info(f"Retrieved submission for assignment ID: {assignment_id} by student ID: {current_user.user_id}")
     return submission
 
 @app.get("/download/{filename}")
@@ -364,6 +389,7 @@ async def download_file(filename: str):
     filepath = os.path.join("uploads", filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File not found")
+    logger.info(f"File downloaded: {filename}")
     return FileResponse(path=filepath, filename=filename, media_type='application/octet-stream')
 
 

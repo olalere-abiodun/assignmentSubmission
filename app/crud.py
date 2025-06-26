@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-import schemas, model
+from app import schemas, model
 from typing import Optional
 
 #User CRUD
